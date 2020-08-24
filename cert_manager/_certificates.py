@@ -77,6 +77,19 @@ class Certificates(Endpoint):
 
         return self.__custom_fields
 
+    def details(self, cert_id):
+        """Retrieve the details of a certificate.
+
+        :param int cert_id: The certificate ID
+        :return dict: A dictionary containing the certificate details.
+        """
+        url = self._url("/{}".format(cert_id))
+        try:
+            result = self._client.get(url)
+            return result.json()
+        except HTTPError:
+            raise Pending(f"Unable to get cert details for {cert_id}")
+
     def collect(self, cert_id, cert_format):
         """Retrieve an existing certificate from the API.
 

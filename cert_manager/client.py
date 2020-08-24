@@ -140,7 +140,14 @@ class Client(object):
         """
         result = self.__session.get(url, headers=headers, params=params)
         # Raise an exception if the return code is in an error range
-        result.raise_for_status()
+        import pprint
+        try:
+            result.raise_for_status()
+        except Exception as err:
+            print("YYYOOOO")
+            #print(url)
+            #pprint.pprint(result.content)
+            print(str(err))
 
         return result
 
