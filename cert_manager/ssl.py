@@ -24,8 +24,7 @@ class SSL(Certificates):
         """
         super(SSL, self).__init__(client=client, endpoint="/ssl", api_version=api_version)
 
-    @paginate
-    def list(self, **kwargs):
+    async def list(self, **kwargs):
         # size, position, commonName, subjectAlternativeName, status , sslTypeId
         # discoveryStatus, vendor, ordIg, installStatus, renewalStatus, issuer, serialNumber, requester
         # externalRequester, signatureAlgorithm, keyAlgorithm, keySize sha1Hash md5Hash keyUsage extendedKeyUsage
@@ -34,6 +33,6 @@ class SSL(Certificates):
         # Discovery status filter. Possible values: 'NotDeployed', 'Deployed'
         # Install status filter. Possible values: 'NOT_SCHEDULED', 'SCHEDULED', 'STARTED', 'SUCCESSFUL', 'FAILED'
         # Renewal status filter. Possible values: 'NOT_SCHEDULED', 'SCHEDULED', 'STARTED', 'SUCCESSFUL', 'FAILED'
-        result = self._client.get(self._api_url, params=kwargs)
-        return result.json()
+        result = await self._client.get(self._api_url, params=kwargs)
+        return result
 

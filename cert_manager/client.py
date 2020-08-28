@@ -5,12 +5,15 @@ import logging
 import re
 import sys
 import aiohttp
+import aiohttp.web
 
-import requests
 import json.decoder
 
 from . import __version__
 from ._helpers import traffic_log
+from ._exceptions import (
+    InvalidRequest
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -46,7 +49,8 @@ class Client(object):
         # Using get for consistency and to allow defaults to be easily set
         self.__base_url = kwargs.get("base_url", "https://cert-manager.com/api")
         self.__cert_auth = kwargs.get("cert_auth", False)
-        self.__session = requests.Session()
+        self.__timeout = 30
+        self.__session = aiohttp.ClientSession()
 
         self.__user_crt_file = kwargs.get("user_crt_file")
         self.__user_key_file = kwargs.get("user_key_file")
@@ -77,7 +81,6 @@ class Client(object):
             self.__password = kwargs["password"]
             self.__headers["password"] = self.__password
 
-        self.__session.headers.update(self.__headers)
 
 
     @property
@@ -116,7 +119,6 @@ class Client(object):
             head = self.__headers.copy()
             head.update(headers)
             self.__headers = head
-            self.__session.headers.update(self.__headers)
 
     def remove_headers(self, headers=None):
         """Remove the requested header keys from the internally stored headers.
@@ -130,28 +132,27 @@ class Client(object):
             for head in headers:
                 if head in self.__headers:
                     del self.__headers[head]
-                    del self.__session.headers[head]
 
-    def _raise_for_status(self, result):
+    async def _raise_for_status(self, result):
         """
         raise_for_status wrapper to get the sectigo error values and messages.
         """
 
-        if 400 <= result.status_code:
+        if result.status >= 400:
             try:
-                error_data = result.json()
-                raise requests.HTTPError((
+                error_data = await result.json()
+                raise aiohttp.ClientError((
                     f"({error_data['code']})"
                     f"Error: {error_data['description']} "
                     f"For: {result.url}"
-                ), response=result)
+                ))
 
             except json.decoder.JSONDecodeError:
                 result.raise_for_status()
 
 
-    @traffic_log(traffic_logger=LOGGER)
-    def get(self, url, headers=None, params=None):
+    #@traffic_log(traffic_logger=LOGGER)
+    async def get(self, url, headers=None, params=None):
         """Submit a GET request to the provided URL.
 
         :param str url: A URL to query
@@ -159,13 +160,14 @@ class Client(object):
         :apram dict params: A dictionary with parameters
         :return obj: A requests.Response object received as a response
         """
-        result = self.__session.get(url, headers=headers, params=params)
-        # Raise an exception if the return code is in an error range
-        self._raise_for_status(result)
-        return result
+        result = await self.request('GET', url=url, headers=headers, params=params)
+        try:
+            return await result.json()
+        except Exception:
+            return {}
 
-    @traffic_log(traffic_logger=LOGGER)
-    def post(self, url, headers=None, data=None):
+    #@traffic_log(traffic_logger=LOGGER)
+    async def post(self, url, headers=None, data=None):
         """Submit a POST request to the provided URL and data.
 
         :param str url: A URL to query
@@ -173,14 +175,14 @@ class Client(object):
         :param dict data: A dictionary with the data to use for the body of the POST
         :return obj: A requests.Response object received as a response
         """
-        result = self.__session.post(url, json=data, headers=headers)
-        # Raise an exception if the return code is in an error range
-        self._raise_for_status(result)
+        result = await self.request('POST', url=url, headers=headers, data=data)
+        try:
+            return await result.json()
+        except Exception:
+            return {}
 
-        return result
-
-    @traffic_log(traffic_logger=LOGGER)
-    def put(self, url, headers=None, data=None):
+    #@traffic_log(traffic_logger=LOGGER)
+    async def put(self, url, headers=None, data=None):
         """Submit a PUT request to the provided URL and data.
 
         :param str url: A URL to query
@@ -188,22 +190,79 @@ class Client(object):
         :param dict data: A dictionary with the data to use for the body of the PUT
         :return obj: A requests.Response object received as a response
         """
-        result = self.__session.put(url, data=data, headers=headers)
-        # Raise an exception if the return code is in an error range
-        self._raise_for_status(result)
+        result = self.request('PUT', url, data=data, headers=headers)
+        try:
+            return await result.json()
+        except Exception:
+            return {}
 
-        return result
-
-    @traffic_log(traffic_logger=LOGGER)
-    def delete(self, url, headers=None):
+    #@traffic_log(traffic_logger=LOGGER)
+    async def delete(self, url, headers=None):
         """Submit a DELETE request to the provided URL.
 
         :param str url: A URL to query
         :param dict headers: A dictionary with any extra headers to add to the request
         :return obj: A requests.Response object received as a response
         """
-        result = self.__session.delete(url, headers=headers)
+        result = await self.request('DELETE', url, headers=headers)
+        try:
+            return await result.json()
+        except Exception:
+            return {}
+
+    async def request(self, method, url, headers=None, params=None, post_params=None, data=None, timeout=10):
+        """Submit a POST request to the provided URL and data.
+
+        :param str method: The HTTP verb to use.
+        :param str url: A URL to query
+        :param dict headers: A dictionary with any extra headers to add to the request
+        :param dict data: A dictionary with the data to use for the body of the POST
+        :apram dict params: A dictionary with parameters
+        :apram dict post_params: A dictionary with post parameters
+        :return obj: A requests.Response object received as a response
+        """
+
+        master_headers = self.__headers.copy()
+        if headers:
+            for header in headers:
+                master_headers[header] = headers[header]
+        else:
+            headers = master_headers
+
+        args = {
+            'method': method,
+            'url': url,
+            'timeout': timeout,
+            'params': data,
+            'headers': headers
+        }
+
+        if method in ['POST', 'PUT', 'PATCH', 'OPTIONS', 'DELETE']:
+            if re.search('json', headers['Content-Type'], re.IGNORECASE):
+                if body is not None:
+                    body = json.dumps(body)
+                args['data'] = body
+            elif headers['Content-Type'] == 'application/x-www-form-urlencoded':  # noqa: E501
+                args['data'] = aiohttp.FormData(post_params)
+
+            # Pass a `bytes` parameter directly in the body to support
+            # other content types than Json when `body` argument is provided
+            # in serialized form
+            elif isinstance(body, bytes):
+                args['data'] = body
+            else:
+                # Cannot generate the request from given parameters
+                raise InvalidRequest(
+                    'Cannot prepare a request message for provided arguments. '
+                    'Please check that your arguments match '
+                    'declared content type.'
+                )
+
+        result = await self.__session.request(**args)
+
         # Raise an exception if the return code is in an error range
-        self._raise_for_status(result)
+        await self._raise_for_status(result)
+
 
         return result
+

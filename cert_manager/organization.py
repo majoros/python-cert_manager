@@ -22,9 +22,8 @@ class Organization(Endpoint):
         super(Organization, self).__init__(client=client, endpoint="/organization", api_version=api_version)
 
         self.__orgs = None
-        self.all()
 
-    def all(self, force=False):
+    async def all(self, force=False):
         """Return a list of organizations from Sectigo.
 
         :param bool force: If set to True, force refreshing the data from the API
@@ -34,13 +33,13 @@ class Organization(Endpoint):
         if (self.__orgs) and (not force):
             return self.__orgs
 
-        result = self._client.get(self._api_url)
+        result = await self._client.get(self._api_url)
 
-        self.__orgs = result.json()
+        self.__orgs = result
 
         return self.__orgs
 
-    def find(self, org_name=None, dept_name=None):
+    async def find(self, org_name=None, dept_name=None):
         """Return a dictionary of organization information.
 
         If only an *org_name* is provided, a dictionary representing the organization will be returned if found.
@@ -61,7 +60,7 @@ class Organization(Endpoint):
         ret = {}
 
         # Use .all to get the data in case it still needs to be fetched
-        result = self.all()
+        result = await self.all()
 
         # If we don't search for something, just return everything
         if (not org_name) and (not dept_name):

@@ -2,6 +2,7 @@
 """Define the cert_manager._certificate.Certificates base class."""
 
 import logging
+import asyncio
 from requests.exceptions import HTTPError
 
 from ._helpers import Pending
@@ -40,7 +41,7 @@ class Certificates(Endpoint):
         self.__custom_fields = None
 
     @property
-    def types(self):
+    async def types(self):
         """Retrieve all certificate types that are currently available.
 
         :return list: A list of dictionaries of certificate types
@@ -49,20 +50,22 @@ class Certificates(Endpoint):
         # specifically wants to refresh the internal cache
         if not self.__cert_types:
             url = self._url("/types")
-            result = self._client.get(url)
+            result = await self._client.get(url)
 
             # Build a dictionary instead of a flat list of dictionaries
             self.__cert_types = {}
-            for res in result.json():
+            for res in result:
                 name = res["name"]
                 self.__cert_types[name] = {}
                 self.__cert_types[name]["id"] = res["id"]
                 self.__cert_types[name]["terms"] = res["terms"]
+        else:
+            await asyncio.sleep(0)
 
         return self.__cert_types
 
     @property
-    def custom_fields(self):
+    async def custom_fields(self):
         """Retrieve all custom fields defined for SSL certificates.
 
         :return list: A list of dictionaries of custom fields
@@ -71,23 +74,23 @@ class Certificates(Endpoint):
         # specifically wants to refresh the internal cache
         if not self.__custom_fields:
             url = self._url("/customFields")
-            result = self._client.get(url)
+            result = await self._client.get(url)
 
-            self.__custom_fields = result.json()
+            self.__custom_fields = result
 
         return self.__custom_fields
 
-    def details(self, cert_id):
+    async def details(self, cert_id):
         """Retrieve the details of a certificate.
 
         :param int cert_id: The certificate ID
         :return dict: A dictionary containing the certificate details.
         """
         url = self._url("/{}".format(cert_id))
-        result = self._client.get(url)
-        return result.json()
+        result = await self._client.get(url)
+        return result
 
-    def collect(self, cert_id, cert_format):
+    async def collect(self, cert_id, cert_format):
         """Retrieve an existing certificate from the API.
 
         :param int cert_id: The certificate ID
@@ -99,12 +102,13 @@ class Certificates(Endpoint):
 
         url = self._url("/collect/{}/{}".format(cert_id, cert_format))
 
-        result = self._client.get(url)
+        result = await self._client.get(url)
 
         # The certificate is ready for collection
-        return result.content.decode(result.encoding)
+        #return result.content.decode(result.encoding) Needed????
+        return result
 
-    def enroll(self, **kwargs):
+    async def enroll(self, **kwargs):
         """Enroll a certificate request with Sectigo to generate a certificate.
 
         :param string cert_type_name: The full cert type name
@@ -139,27 +143,29 @@ class Certificates(Endpoint):
             raise Exception("Incorrect term specified: {}.  Valid terms are {}.".format(term, trm))
 
         url = self._url("/enroll")
+        # FIXME: pass in the user
         data = {
-            "orgId": org_id, "csr": csr.rstrip(), "subjAltNames": subject_alt_names, "certType": type_id,
-            "numberServers": 1, "serverType": -1, "term": term, "comments": "Enrolled by %s" % self._client.user_agent,
+            "orgId": org_id, "csr": csr.rstrip(), "subjAltNames": subject_alt_names,
+            "certType": type_id, "numberServers": 1, "serverType": -1, "term": term,
+            "comments": "Enrolled by %s" % self._client.user_agent,
             "externalRequester": ""
         }
-        result = self._client.post(url, data=data)
+        result = await self._client.post(url, data=data)
 
-        return result.json()
+        return result
 
-    def renew(self, cert_id):
+    async def renew(self, cert_id):
         """Renew the certificate specified by the certificate ID.
 
         :param int cert_id: The certificate ID
         :return dict: The renewal result. "Successful" on success
         """
         url = self._url("/renewById/{}".format(cert_id))
-        result = self._client.post(url, data="")
+        result = await self._client.post(url, data="")
 
-        return result.json()
+        return result
 
-    def replace(self, **kwargs):
+    async def replace(self, **kwargs):
         """Replace a pre-existing certificate.
 
         :param int cert_id: The certificate ID
@@ -180,11 +186,11 @@ class Certificates(Endpoint):
         url = self._url("/replace/{}".format(cert_id))
         data = {"csr": csr, "commonName": common_name, "subjectAlternativeNames": subject_alt_names, "reason": reason}
 
-        result = self._client.post(url, data=data)
+        result = await self._client.post(url, data=data)
 
-        return result.json()
+        return result
 
-    def revoke(self, cert_id, reason=""):
+    async def revoke(self, cert_id, reason=""):
         """Revoke the certificate specified by the certificate ID.
 
         :param int cert_id: The certificate ID
@@ -200,6 +206,6 @@ class Certificates(Endpoint):
 
         data = {"reason": reason}
 
-        result = self._client.post(url, data=data)
+        result = await self._client.post(url, data=data)
 
-        return result.json()
+        return result

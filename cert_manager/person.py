@@ -23,7 +23,7 @@ class Person(Endpoint):
         """
         super(Person, self).__init__(client=client, endpoint="/person", api_version=api_version)
 
-    def find(self, email):
+    async def find(self, email):
         """Return a list of people with the given email from the Sectigo API.
 
         :param str email: The email address for which we are searching
@@ -39,6 +39,6 @@ class Person(Endpoint):
 
         url = self._url("/id/byEmail/%s" % quoted_email)
 
-        result = self._client.get(url)
+        result = await self._client.get(url)
 
-        return result.json()
+        return result
