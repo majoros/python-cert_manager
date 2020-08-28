@@ -37,7 +37,3 @@ class SSL(Certificates):
         result = self._client.get(self._api_url, params=kwargs)
         return result.json()
 
-    def get(self, cert_id):
-        url = self._url("/{}".format(cert_id))
-        result = self._client.get(url)
-        return result.json()

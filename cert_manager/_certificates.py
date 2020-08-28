@@ -84,16 +84,11 @@ class Certificates(Endpoint):
         :return dict: A dictionary containing the certificate details.
         """
         url = self._url("/{}".format(cert_id))
-        try:
-            result = self._client.get(url)
-            return result.json()
-        except HTTPError:
-            raise Pending(f"Unable to get cert details for {cert_id}")
+        result = self._client.get(url)
+        return result.json()
 
     def collect(self, cert_id, cert_format):
         """Retrieve an existing certificate from the API.
-
-        This method will raise a Pending exception if the certificate is still in a pending state.
 
         :param int cert_id: The certificate ID
         :param str cert_format: The format in which to retreive the certificate. Allowed values: *self.valid_formats*
@@ -104,10 +99,7 @@ class Certificates(Endpoint):
 
         url = self._url("/collect/{}/{}".format(cert_id, cert_format))
 
-        try:
-            result = self._client.get(url)
-        except HTTPError:
-            raise Pending("certificate %d still in 'pending' state" % cert_id)
+        result = self._client.get(url)
 
         # The certificate is ready for collection
         return result.content.decode(result.encoding)

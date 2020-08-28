@@ -4,8 +4,10 @@
 import logging
 import re
 import sys
+import aiohttp
 
 import requests
+import json.decoder
 
 from . import __version__
 from ._helpers import traffic_log
@@ -77,6 +79,7 @@ class Client(object):
 
         self.__session.headers.update(self.__headers)
 
+
     @property
     def user_agent(self):
         """Return a user-agent string including the module version and Python version."""
@@ -129,6 +132,24 @@ class Client(object):
                     del self.__headers[head]
                     del self.__session.headers[head]
 
+    def _raise_for_status(self, result):
+        """
+        raise_for_status wrapper to get the sectigo error values and messages.
+        """
+
+        if 400 <= result.status_code:
+            try:
+                error_data = result.json()
+                raise requests.HTTPError((
+                    f"({error_data['code']})"
+                    f"Error: {error_data['description']} "
+                    f"For: {result.url}"
+                ), response=result)
+
+            except json.decoder.JSONDecodeError:
+                result.raise_for_status()
+
+
     @traffic_log(traffic_logger=LOGGER)
     def get(self, url, headers=None, params=None):
         """Submit a GET request to the provided URL.
@@ -140,15 +161,7 @@ class Client(object):
         """
         result = self.__session.get(url, headers=headers, params=params)
         # Raise an exception if the return code is in an error range
-        import pprint
-        try:
-            result.raise_for_status()
-        except Exception as err:
-            print("YYYOOOO")
-            #print(url)
-            #pprint.pprint(result.content)
-            print(str(err))
-
+        self._raise_for_status(result)
         return result
 
     @traffic_log(traffic_logger=LOGGER)
@@ -162,7 +175,7 @@ class Client(object):
         """
         result = self.__session.post(url, json=data, headers=headers)
         # Raise an exception if the return code is in an error range
-        result.raise_for_status()
+        self._raise_for_status(result)
 
         return result
 
@@ -177,7 +190,7 @@ class Client(object):
         """
         result = self.__session.put(url, data=data, headers=headers)
         # Raise an exception if the return code is in an error range
-        result.raise_for_status()
+        self._raise_for_status(result)
 
         return result
 
@@ -191,6 +204,6 @@ class Client(object):
         """
         result = self.__session.delete(url, headers=headers)
         # Raise an exception if the return code is in an error range
-        result.raise_for_status()
+        self._raise_for_status(result)
 
         return result
