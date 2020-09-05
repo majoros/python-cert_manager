@@ -6,13 +6,15 @@ import re
 import sys
 import aiohttp
 import aiohttp.web
+import pprint
 
 import json.decoder
 
 from . import __version__
 from ._helpers import traffic_log
-from ._exceptions import (
-    InvalidRequest
+from .exceptions import (
+    InvalidRequest,
+    ResponseError,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -57,10 +59,9 @@ class Client(object):
 
         # Set the default HTTP headers
         self.__headers = {
-            "login": self.__username,
-            "customerUri": self.__login_uri,
-            "Accept": "application/json",
-            "User-Agent": self.user_agent,
+            'customerUri': self.__login_uri,
+            'login': self.__username,
+            'Content-Type': 'application/json',
         }
 
         # Setup the Session for certificate auth
@@ -141,14 +142,17 @@ class Client(object):
         if result.status >= 400:
             try:
                 error_data = await result.json()
-                raise aiohttp.ClientError((
-                    f"({error_data['code']})"
-                    f"Error: {error_data['description']} "
-                    f"For: {result.url}"
-                ))
+                raise ResponseError(
+                    error_data['description'],
+                    error_data['code'],
+                    result.url,
+                )
 
             except json.decoder.JSONDecodeError:
-                result.raise_for_status()
+                try:
+                    result.raise_for_status()
+                except aiohttp.ClientError as err:
+                    raise ResponseError(str(err))
 
 
     #@traffic_log(traffic_logger=LOGGER)
@@ -162,8 +166,9 @@ class Client(object):
         """
         result = await self.request('GET', url=url, headers=headers, params=params)
         try:
-            return await result.json()
-        except Exception:
+            return result
+        except Exception as err:
+            print(str(err))
             return {}
 
     #@traffic_log(traffic_logger=LOGGER)
@@ -177,7 +182,7 @@ class Client(object):
         """
         result = await self.request('POST', url=url, headers=headers, data=data)
         try:
-            return await result.json()
+            return result
         except Exception:
             return {}
 
@@ -190,9 +195,9 @@ class Client(object):
         :param dict data: A dictionary with the data to use for the body of the PUT
         :return obj: A requests.Response object received as a response
         """
-        result = self.request('PUT', url, data=data, headers=headers)
+        result = await self.request('PUT', url, data=data, headers=headers)
         try:
-            return await result.json()
+            return result
         except Exception:
             return {}
 
@@ -206,7 +211,7 @@ class Client(object):
         """
         result = await self.request('DELETE', url, headers=headers)
         try:
-            return await result.json()
+            return result
         except Exception:
             return {}
 
@@ -233,23 +238,22 @@ class Client(object):
             'method': method,
             'url': url,
             'timeout': timeout,
-            'params': data,
+            'params': params,
             'headers': headers
         }
 
         if method in ['POST', 'PUT', 'PATCH', 'OPTIONS', 'DELETE']:
             if re.search('json', headers['Content-Type'], re.IGNORECASE):
-                if body is not None:
-                    body = json.dumps(body)
-                args['data'] = body
+                if data is not None:
+                    args['data'] = data
             elif headers['Content-Type'] == 'application/x-www-form-urlencoded':  # noqa: E501
                 args['data'] = aiohttp.FormData(post_params)
 
             # Pass a `bytes` parameter directly in the body to support
             # other content types than Json when `body` argument is provided
             # in serialized form
-            elif isinstance(body, bytes):
-                args['data'] = body
+            elif isinstance(data, bytes):
+                args['data'] = data
             else:
                 # Cannot generate the request from given parameters
                 raise InvalidRequest(
@@ -262,7 +266,6 @@ class Client(object):
 
         # Raise an exception if the return code is in an error range
         await self._raise_for_status(result)
-
 
         return result
 

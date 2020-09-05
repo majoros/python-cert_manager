@@ -26,7 +26,7 @@ class SSL(Certificates):
 
     async def list(self, **kwargs):
         # size, position, commonName, subjectAlternativeName, status , sslTypeId
-        # discoveryStatus, vendor, ordIg, installStatus, renewalStatus, issuer, serialNumber, requester
+        # discoveryStatus, vendor, ordId, installStatus, renewalStatus, issuer, serialNumber, requester
         # externalRequester, signatureAlgorithm, keyAlgorithm, keySize sha1Hash md5Hash keyUsage extendedKeyUsage
         # requestedVia
         # Status filter. Possible values: 'Invalid', 'Requested', 'Approved', 'Declined', 'Applied', 'Issued', 'Revoked', 'Expired', 'Replaced', 'Rejected', 'Unmanaged', 'SAApproved', 'Init'
@@ -34,5 +34,6 @@ class SSL(Certificates):
         # Install status filter. Possible values: 'NOT_SCHEDULED', 'SCHEDULED', 'STARTED', 'SUCCESSFUL', 'FAILED'
         # Renewal status filter. Possible values: 'NOT_SCHEDULED', 'SCHEDULED', 'STARTED', 'SUCCESSFUL', 'FAILED'
         result = await self._client.get(self._api_url, params=kwargs)
+        result = await result.json()
         return result
 

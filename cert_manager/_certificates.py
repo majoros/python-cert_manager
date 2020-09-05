@@ -51,6 +51,7 @@ class Certificates(Endpoint):
         if not self.__cert_types:
             url = self._url("/types")
             result = await self._client.get(url)
+            result = await result.json()
 
             # Build a dictionary instead of a flat list of dictionaries
             self.__cert_types = {}
@@ -75,6 +76,7 @@ class Certificates(Endpoint):
         if not self.__custom_fields:
             url = self._url("/customFields")
             result = await self._client.get(url)
+            result = await result.json()
 
             self.__custom_fields = result
 
@@ -88,6 +90,7 @@ class Certificates(Endpoint):
         """
         url = self._url("/{}".format(cert_id))
         result = await self._client.get(url)
+        result = await result.json()
         return result
 
     async def collect(self, cert_id, cert_format):
@@ -103,9 +106,9 @@ class Certificates(Endpoint):
         url = self._url("/collect/{}/{}".format(cert_id, cert_format))
 
         result = await self._client.get(url)
+        result = await result.text()
 
         # The certificate is ready for collection
-        #return result.content.decode(result.encoding) Needed????
         return result
 
     async def enroll(self, **kwargs):
@@ -119,14 +122,17 @@ class Certificates(Endpoint):
         :param list subject_alt_names: A list of Subject Alternative Names
         :return dict: The certificate_id and the normal status messages for errors
         """
-        cert_types = self.types
+        cert_types = await self.types
 
         # Retrieve all the arguments
         cert_type_name = kwargs.get("cert_type_name")
         csr = kwargs.get("csr")
         term = kwargs.get("term")
         org_id = kwargs.get("org_id")
-        subject_alt_names = kwargs.get("subject_alt_names", None)
+        subject_alt_names = kwargs.get("subject_alt_names", "")
+
+        if isinstance(subject_alt_names, list):
+            subject_alt_names = ','.join(subject_alt_names)
 
         # Make sure a valid certificate type name was provided
         if cert_type_name not in cert_types:
@@ -142,15 +148,16 @@ class Certificates(Endpoint):
             trm = ", ".join(list(map(str, terms)))
             raise Exception("Incorrect term specified: {}.  Valid terms are {}.".format(term, trm))
 
+        csr = csr.replace("\n", r"\n").strip()
         url = self._url("/enroll")
-        # FIXME: pass in the user
-        data = {
-            "orgId": org_id, "csr": csr.rstrip(), "subjAltNames": subject_alt_names,
-            "certType": type_id, "numberServers": 1, "serverType": -1, "term": term,
-            "comments": "Enrolled by %s" % self._client.user_agent,
-            "externalRequester": ""
-        }
+
+        # Yes this horrible line was done like this o purpose.
+        # Not sure what sectigo is using to parse the json but
+        # it is *NOT* RFC7159 complaint(at least as of 2020-09-04)
+        data = f'{{"orgId":{org_id},"subjAltNames":"{subject_alt_names}","certType":{type_id},"numberServers":0,"serverType":-1,"term":{term},"comments":"test comment","externalRequester":"","csr":"{csr}"}}'
+
         result = await self._client.post(url, data=data)
+        result = await result.json()
 
         return result
 
@@ -162,6 +169,7 @@ class Certificates(Endpoint):
         """
         url = self._url("/renewById/{}".format(cert_id))
         result = await self._client.post(url, data="")
+        result = await result.json()
 
         return result
 
@@ -187,6 +195,7 @@ class Certificates(Endpoint):
         data = {"csr": csr, "commonName": common_name, "subjectAlternativeNames": subject_alt_names, "reason": reason}
 
         result = await self._client.post(url, data=data)
+        result = await result.json()
 
         return result
 
@@ -207,5 +216,6 @@ class Certificates(Endpoint):
         data = {"reason": reason}
 
         result = await self._client.post(url, data=data)
+        result = await result.json()
 
         return result

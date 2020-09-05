@@ -34,6 +34,7 @@ class Organization(Endpoint):
             return self.__orgs
 
         result = await self._client.get(self._api_url)
+        result = await result.json()
 
         self.__orgs = result
 

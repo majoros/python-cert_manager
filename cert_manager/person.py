@@ -40,5 +40,6 @@ class Person(Endpoint):
         url = self._url("/id/byEmail/%s" % quoted_email)
 
         result = await self._client.get(url)
+        result = await result.json()
 
         return result
