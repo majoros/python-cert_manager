@@ -142,6 +142,11 @@ class Client(object):
         if result.status >= 400:
             try:
                 error_data = await result.json()
+                print('!!!')
+                print(error_data['description'])
+                print(error_data['code'])
+                print(result.url)
+                print('!!!')
                 raise ResponseError(
                     error_data['description'],
                     error_data['code'],
