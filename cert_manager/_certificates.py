@@ -4,6 +4,7 @@
 import logging
 import asyncio
 from requests.exceptions import HTTPError
+from datetime import datetime as dt
 
 from ._helpers import Pending
 from ._endpoint import Endpoint
@@ -91,6 +92,10 @@ class Certificates(Endpoint):
         url = self._url("/{}".format(cert_id))
         result = await self._client.get(url)
         result = await result.json()
+        if 'expires' not in result:
+            result['expires'] = ''
+        else:
+            result['expires'] = dt.strptime(result['expires'], '%m/%d/%Y')
         return result
 
     async def collect(self, cert_id, cert_format):
@@ -128,8 +133,8 @@ class Certificates(Endpoint):
         cert_type_name = kwargs.get("cert_type_name")
         csr = kwargs.get("csr")
         term = kwargs.get("term")
-        org_id = kwargs.get("org_id")
-        subject_alt_names = kwargs.get("subject_alt_names", "")
+        org_id = kwargs.get("orgId")
+        subject_alt_names = kwargs.get("subjectAltNames", "")
 
         if isinstance(subject_alt_names, list):
             subject_alt_names = ','.join(subject_alt_names)
@@ -213,9 +218,8 @@ class Certificates(Endpoint):
         if (not reason) or (len(reason) > 511):
             raise Exception("Sectigo limit: reason must be > 0 character and < 512 characters")
 
-        data = {"reason": reason}
+        data = f'{{"reason":"{reason}"}}'
 
-        result = await self._client.post(url, data=data)
-        result = await result.json()
-
-        return result
+        _result = await self._client.post(url, data=data)
+        # There are no results *sigh* so if we get a 2** we consider it a win.
+        return True

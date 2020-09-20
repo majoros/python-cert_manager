@@ -6,7 +6,6 @@ import re
 import sys
 import aiohttp
 import aiohttp.web
-import pprint
 
 import json.decoder
 
@@ -142,11 +141,6 @@ class Client(object):
         if result.status >= 400:
             try:
                 error_data = await result.json()
-                print('!!!')
-                print(error_data['description'])
-                print(error_data['code'])
-                print(result.url)
-                print('!!!')
                 raise ResponseError(
                     error_data['description'],
                     error_data['code'],
@@ -220,7 +214,7 @@ class Client(object):
         except Exception:
             return {}
 
-    async def request(self, method, url, headers=None, params=None, post_params=None, data=None, timeout=10):
+    async def request(self, method, url, headers=None, params=None, post_params=None, data=None):
         """Submit a POST request to the provided URL and data.
 
         :param str method: The HTTP verb to use.
@@ -242,7 +236,7 @@ class Client(object):
         args = {
             'method': method,
             'url': url,
-            'timeout': timeout,
+            'timeout': self.__timeout,
             'params': params,
             'headers': headers
         }
@@ -268,7 +262,6 @@ class Client(object):
                 )
 
         result = await self.__session.request(**args)
-
         # Raise an exception if the return code is in an error range
         await self._raise_for_status(result)
 
