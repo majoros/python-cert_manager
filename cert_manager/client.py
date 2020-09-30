@@ -52,7 +52,7 @@ class Client(object):
         self.__base_url = kwargs.get("base_url", "https://cert-manager.com/api")
         self.__cert_auth = kwargs.get("cert_auth", False)
         self.__timeout = 30
-        self.__session = aiohttp.ClientSession(trust_env=kwargs.get('trust_env', False)
+        self.__session = aiohttp.ClientSession(trust_env=kwargs.get('trust_env', False))
 
         self.__user_crt_file = kwargs.get("user_crt_file")
         self.__user_key_file = kwargs.get("user_key_file")
