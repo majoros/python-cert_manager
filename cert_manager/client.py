@@ -42,6 +42,7 @@ class Client(object):
         :param bool cert_auth: Use client certificate authentication if True; the default is False
         :param string user_crt_file: The path to the certificate file if using client cert auth
         :param string user_key_file: The path to the key file if using client cert auth
+        :param bool trust_env: Get proxies information from HTTP_PROXY / HTTPS_PROXY environment variables if the parameter is True (False by default).
         """
         # These options are required, so raise a KeyError if they are not provided.
         self.__login_uri = kwargs["login_uri"]
@@ -51,7 +52,7 @@ class Client(object):
         self.__base_url = kwargs.get("base_url", "https://cert-manager.com/api")
         self.__cert_auth = kwargs.get("cert_auth", False)
         self.__timeout = 30
-        self.__session = aiohttp.ClientSession()
+        self.__session = aiohttp.ClientSession(trust_env=kwargs.get('trust_env', False)
 
         self.__user_crt_file = kwargs.get("user_crt_file")
         self.__user_key_file = kwargs.get("user_key_file")
