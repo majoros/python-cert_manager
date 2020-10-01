@@ -2,6 +2,7 @@
 """Define the cert_manager.client.Client class."""
 
 import logging
+import os
 import re
 import sys
 import aiohttp
