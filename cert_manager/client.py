@@ -263,7 +263,6 @@ class Client(object):
                     'declared content type.'
                 )
 
-        pprint.pprint(args)
         result = await self.__session.request(**args)
         # Raise an exception if the return code is in an error range
         await self._raise_for_status(result)
