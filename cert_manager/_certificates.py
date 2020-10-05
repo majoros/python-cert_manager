@@ -133,7 +133,7 @@ class Certificates(Endpoint):
         cert_type_name = kwargs.get("cert_type_name")
         csr = kwargs.get("csr")
         term = kwargs.get("term")
-        org_id = kwargs.get("orgId")
+        org_id = kwargs.get("org_id")
         subject_alt_names = kwargs.get("subjectAltNames", "")
 
         if isinstance(subject_alt_names, list):
@@ -156,7 +156,7 @@ class Certificates(Endpoint):
         csr = csr.replace("\n", r"\n").strip()
         url = self._url("/enroll")
 
-        # Yes this horrible line was done like this o purpose.
+        # Yes this horrible line was done like this on purpose.
         # Not sure what sectigo is using to parse the json but
         # it is *NOT* RFC7159 complaint(at least as of 2020-09-04)
         data = f'{{"orgId":{org_id},"subjAltNames":"{subject_alt_names}","certType":{type_id},"numberServers":0,"serverType":-1,"term":{term},"comments":"test comment","externalRequester":"","csr":"{csr}"}}'
