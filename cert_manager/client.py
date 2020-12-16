@@ -168,6 +168,7 @@ class Client(object):
         try:
             return result
         except Exception as err:
+            print('deguq')
             print(str(err))
             return {}
 
@@ -264,7 +265,7 @@ class Client(object):
                 )
 
         result = await self.__session.request(**args)
-        # Raise an exception if the return code is in an error range
+        # TODO: Raise an exception if the return code is in an error range
         await self._raise_for_status(result)
 
         return result

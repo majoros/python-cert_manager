@@ -134,7 +134,7 @@ class Certificates(Endpoint):
         csr = kwargs.get("csr")
         term = kwargs.get("term")
         org_id = kwargs.get("org_id")
-        subject_alt_names = kwargs.get("subjectAltNames", "")
+        subject_alt_names = kwargs.get("subject_alt_names", "")
 
         if isinstance(subject_alt_names, list):
             subject_alt_names = ','.join(subject_alt_names)
