@@ -4,15 +4,20 @@
 import sys
 
 import fixtures
+from aiohttp import web
+import pytest
 
 from cert_manager.client import Client
 from cert_manager import __version__
 
+import logging
 
-class ClientFixture(fixtures.Fixture):
+
+#class ClientFixture(fixtures.Fixture):
+class BaseTestClient(object):
     """Build a fixture for a default cert_manager.client.Client object."""
 
-    def _setUp(self):
+    def __init__(self):
         """Setup the Client object and the values used to build the object."""
         # Setup default testing values
         self.base_url = "https://certs.example.com/api"
@@ -22,6 +27,7 @@ class ClientFixture(fixtures.Fixture):
         self.user_crt_file = "/path/to/pub.key"
         self.user_key_file = "/path/to/priv.key"
 
+        logging.getLogger('asyncio').setLevel(logging.CRITICAL)
         # This is basically the same code as the code used in Client.  This is used just to lock in the
         # data that the user-agent should have in it.
         ver_info = list(map(str, sys.version_info))
@@ -39,5 +45,3 @@ class ClientFixture(fixtures.Fixture):
             "Accept": "application/json",
             "User-Agent": self.user_agent,
         }
-
-        self.addCleanup(delattr, self, "client")

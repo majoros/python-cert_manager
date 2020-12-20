@@ -13,15 +13,19 @@ import sys
 import mock
 from testtools import TestCase
 
-from requests.exceptions import HTTPError
-import responses
+import asyncio
+import aiohttp
+import aiounittest
+from aioresponses import CallbackResult, aioresponses
+
 
 from cert_manager.client import Client
+from cert_manager.exceptions import SectigoConnectionError, ResponseError
 
-from .lib.testbase import ClientFixture
+from .lib.testbase import BaseTestClient
 
 
-class TestClient(TestCase):  # pylint: disable=too-few-public-methods
+class TestClient(aiounittest.AsyncTestCase):  # pylint: disable=too-few-public-methods
     """Serve as a Base class for all tests of the Client class."""
 
     def setUp(self):  # pylint: disable=invalid-name
@@ -30,7 +34,7 @@ class TestClient(TestCase):  # pylint: disable=too-few-public-methods
         super(TestClient, self).setUp()
 
         # Use the Client fixture
-        self.cfixt = self.useFixture(ClientFixture())
+        self.cfixt = BaseTestClient()
         self.client = self.cfixt.client
 
     def tearDown(self):
@@ -247,7 +251,8 @@ class TestRemoveHeaders(TestClient):
 
     def test_remove(self):
         """The headers should be removed correctly if passed a list."""
-        headers = ["Accept", "customerUri"]
+        # FIXME
+        headers = ["User-Agent"]
 
         self.client.remove_headers(headers)
 
@@ -278,7 +283,115 @@ class TestRemoveHeaders(TestClient):
                 self.assertEqual(self.cfixt.headers[head], self.client._Client__session.headers[head])
 
 
-class TestGet(TestClient):
+
+class BaseTestMethod():
+    """Test the get method."""
+
+    @aioresponses()
+    async def test_success(self, m):
+        """It should return data correctly if a 200-level status code is returned with data."""
+        # Setup the mocked response
+
+        m.clear()
+        self.client.__session = aiohttp.ClientSession()
+        m.add(
+            url=self.test_url,
+            method=self.method,
+            payload=self.output_data,
+        )
+
+        cur_reqs = len(m.requests)
+        # Call the function
+        if self.call_type in ['get', 'delete']:
+            resp = await self.call(self.test_url, headers=self.headers)
+        else:
+            resp = await self.call(self.test_url, headers=self.headers, data=self.input_data)
+        print("?????????????????????????")
+        print("?????????????????????????")
+        print(len(m.requests))
+        print(cur_reqs)
+        print("?????????????????????????")
+        print("?????????????????????????")
+
+        # Verify all the query information
+        self.assertEqual(await resp.json(), self.output_data)
+        self.assertEqual(len(m.requests), cur_reqs + 1)
+        self.assertEqual(str(list(m.requests)[cur_reqs][0]), self.call_type.upper())
+        self.assertEqual(str(list(m.requests)[cur_reqs][1]), self.test_url)
+
+    @aioresponses()
+    async def test_headers(self, m):
+        """It should add passed headers."""
+        # Setup the mocked response
+
+        m.clear()
+        self.client.__session = aiohttp.ClientSession()
+        m.add(
+            method=self.method,
+            url=self.test_url,
+            payload=self.output_data,
+            headers=self.headers,
+        )
+        cur_reqs = len(m.requests)
+
+        # Call the function with extra headers
+        if self.call_type in ['get', 'delete']:
+            resp = await self.call(self.test_url, headers=self.headers)
+        else:
+            resp = await self.call(self.test_url, headers=self.headers, data=self.input_data)
+
+        # Verify all the query information
+        print("?????????????????????????")
+        print("?????????????????????????")
+        print(len(m.requests))
+        print(cur_reqs)
+        print("?????????????????????????")
+        print("?????????????????????????")
+        self.assertEqual(await resp.json(), self.output_data)
+        self.assertEqual(len(m.requests), cur_reqs + 1)
+        self.assertEqual(str(list(m.requests)[cur_reqs][0]), self.call_type.upper())
+        self.assertEqual(str(list(m.requests)[cur_reqs][1]), self.test_url)
+
+        requests_headers = m.requests[list(m.requests)[0]]
+        for head in self.headers:
+            self.assertTrue(head in requests_headers[0][1]['headers'])
+            self.assertEqual(self.headers[head], requests_headers[0][1]['headers'][head])
+
+    @aioresponses()
+    async def test_failure(self, m):
+        """It should raise an SectigoConnectionError exception if an error status code is returned."""
+        # Setup the mocked response
+
+        m.clear()
+        self.client.__session = aiohttp.ClientSession()
+
+        def callback(url, **kwargs):
+            return CallbackResult(
+                payload=self.failure_output_data,
+                headers=self.headers,
+                status=404,
+            )
+
+        m.add(
+            url=self.test_url,
+            method=self.method,
+            callback=callback,
+        )
+        cur_reqs = len(m.requests)
+
+        # Call the function, expecting an exception
+        #self.assertRaises(SectigoConnectionError, self.client.get, self.test_url)
+        with self.assertRaises(ResponseError):
+            resp = await self.call(self.test_url, headers=self.headers)
+            self.assertEqual(await resp.json(), failure_output_data)
+
+        # Still make sure it actually did a query and received a result
+        self.assertEqual(len(m.requests), cur_reqs + 1)
+        self.assertEqual(str(list(m.requests)[cur_reqs][0]), self.call_type.upper())
+        self.assertEqual(str(list(m.requests)[cur_reqs][1]), self.test_url)
+
+
+class TestGet(BaseTestMethod, TestClient):
     """Test the get method."""
 
     def setUp(self):  # pylint: disable=invalid-name
@@ -289,122 +402,16 @@ class TestGet(TestClient):
         # An example URL to use in testing
         self.test_url = self.cfixt.base_url + "/test/url"
 
-    @responses.activate
-    def test_success(self):
-        """It should return data correctly if a 200-level status code is returned with data."""
-        # Setup the mocked response
-        json_data = {"some": "data"}
-        responses.add(responses.GET, self.test_url, json=json_data, status=200)
+        self.method = aiohttp.hdrs.METH_GET
+        self.call_type = str(self.method).lower()
+        self.call = getattr(self.client, self.call_type)
+        self.input_data = {"input": "data"}
+        self.output_data = {"output": "data"}
+        self.failure_output_data = {'description': 'nice', 'code': 69}
+        self.headers = {"Content-Type": "application/json", "newheader": "123"}
 
-        # Call the function
-        resp = self.client.get(self.test_url)
-
-        # Verify all the query information
-        self.assertEqual(resp.json(), json_data)
-        self.assertEqual(len(responses.calls), 1)
-        self.assertEqual(responses.calls[0].request.url, self.test_url)
-
-    @responses.activate
-    def test_headers(self):
-        """It should add passed headers."""
-        # Setup the mocked response
-        json_data = {"some": "data"}
-        responses.add(responses.GET, self.test_url, json=json_data, status=200)
-
-        # Call the function with extra headers
-        headers = {"newheader": "123"}
-        resp = self.client.get(self.test_url, headers=headers)
-
-        # Verify all the query information
-        self.assertEqual(resp.json(), json_data)
-        self.assertEqual(len(responses.calls), 1)
-        self.assertEqual(responses.calls[0].request.url, self.test_url)
-
-        for head in headers:
-            self.assertTrue(head in responses.calls[0].request.headers)
-            self.assertEqual(headers[head], responses.calls[0].request.headers[head])
-
-    @responses.activate
-    def test_failure(self):
-        """It should raise an HTTPError exception if an error status code is returned."""
-        # Setup the mocked response
-        json_data = {"description": "some error"}
-        responses.add(responses.GET, self.test_url, json=json_data, status=404)
-
-        # Call the function, expecting an exception
-        self.assertRaises(HTTPError, self.client.get, self.test_url)
-
-        # Still make sure it actually did a query and received a result
-        self.assertEqual(len(responses.calls), 1)
-        self.assertEqual(responses.calls[0].request.url, self.test_url)
-
-
-class TestPost(TestClient):
-    """Test the post method."""
-
-    def setUp(self):  # pylint: disable=invalid-name
-        """Initialize the class."""
-        # Call the inherited setUp method
-        super(TestPost, self).setUp()
-
-        # An example URL to use in testing
-        self.test_url = self.cfixt.base_url + "/test/url"
-
-    @responses.activate
-    def test_success(self):
-        """It should return data correctly if a 200-level status code is returned with data."""
-        # Setup the mocked response
-        input_data = {"input": "data"}
-        output_data = {"output": "data"}
-        responses.add(responses.POST, self.test_url, json=output_data, status=200)
-
-        # Call the function
-        resp = self.client.post(self.test_url, data=input_data)
-
-        # Verify all the query information
-        self.assertEqual(resp.json(), output_data)
-        self.assertEqual(len(responses.calls), 1)
-        self.assertEqual(responses.calls[0].request.url, self.test_url)
-
-    @responses.activate
-    def test_headers(self):
-        """It should add passed headers."""
-        # Setup the mocked response
-        input_data = {"input": "data"}
-        output_data = {"output": "data"}
-        responses.add(responses.POST, self.test_url, json=output_data, status=200)
-
-        # Call the function with extra headers
-        headers = {"newheader": "123"}
-        resp = self.client.post(self.test_url, headers=headers, data=input_data)
-
-        # Verify all the query information
-        self.assertEqual(resp.json(), output_data)
-        self.assertEqual(len(responses.calls), 1)
-        self.assertEqual(responses.calls[0].request.url, self.test_url)
-
-        for head in headers:
-            self.assertTrue(head in responses.calls[0].request.headers)
-            self.assertEqual(headers[head], responses.calls[0].request.headers[head])
-
-    @responses.activate
-    def test_failure(self):
-        """It should raise an HTTPError exception if an error status code is returned."""
-        # Setup the mocked response
-        input_data = {"input": "data"}
-        output_data = {"output": "data"}
-        responses.add(responses.POST, self.test_url, json=output_data, status=404)
-
-        # Call the function, expecting an exception
-        self.assertRaises(HTTPError, self.client.post, self.test_url, data=input_data)
-
-        # Still make sure it actually did a query and received a result
-        self.assertEqual(len(responses.calls), 1)
-        self.assertEqual(responses.calls[0].request.url, self.test_url)
-
-
-class TestPut(TestClient):
-    """Test the put method."""
+class TestPut(BaseTestMethod, TestClient):
+    """Test the get method."""
 
     def setUp(self):  # pylint: disable=invalid-name
         """Initialize the class."""
@@ -414,61 +421,35 @@ class TestPut(TestClient):
         # An example URL to use in testing
         self.test_url = self.cfixt.base_url + "/test/url"
 
-    @responses.activate
-    def test_success(self):
-        """It should return data correctly if a 200-level status code is returned with data."""
-        # Setup the mocked response
-        input_data = {"input": "data"}
-        output_data = {"output": "data"}
-        responses.add(responses.PUT, self.test_url, json=output_data, status=200)
+        self.method = aiohttp.hdrs.METH_PUT
+        self.call_type = str(self.method).lower()
+        self.call = getattr(self.client, self.call_type)
+        self.input_data = {"input": "data"}
+        self.output_data = {"output": "data"}
+        self.failure_output_data = {'description': 'nice', 'code': 69}
+        self.headers = {"Content-Type": "application/json", "newheader": "123"}
 
-        # Call the function
-        resp = self.client.put(self.test_url, data=input_data)
+class TestPost(BaseTestMethod, TestClient):
+    """Test the get method."""
 
-        # Verify all the query information
-        self.assertEqual(resp.json(), output_data)
-        self.assertEqual(len(responses.calls), 1)
-        self.assertEqual(responses.calls[0].request.url, self.test_url)
+    def setUp(self):  # pylint: disable=invalid-name
+        """Initialize the class."""
+        # Call the inherited setUp method
+        super(TestPost, self).setUp()
 
-    @responses.activate
-    def test_headers(self):
-        """It should add passed headers."""
-        # Setup the mocked response
-        input_data = {"input": "data"}
-        output_data = {"output": "data"}
-        responses.add(responses.PUT, self.test_url, json=output_data, status=200)
+        # An example URL to use in testing
+        self.test_url = self.cfixt.base_url + "/test/url"
 
-        # Call the function with extra headers
-        headers = {"newheader": "123"}
-        resp = self.client.put(self.test_url, headers=headers, data=input_data)
+        self.method = aiohttp.hdrs.METH_POST
+        self.call_type = str(self.method).lower()
+        self.call = getattr(self.client, self.call_type)
+        self.input_data = {"input": "data"}
+        self.output_data = {"output": "data"}
+        self.failure_output_data = {'description': 'nice', 'code': 69}
+        self.headers = {"Content-Type": "application/json", "newheader": "123"}
 
-        # Verify all the query information
-        self.assertEqual(resp.json(), output_data)
-        self.assertEqual(len(responses.calls), 1)
-        self.assertEqual(responses.calls[0].request.url, self.test_url)
-
-        for head in headers:
-            self.assertTrue(head in responses.calls[0].request.headers)
-            self.assertEqual(headers[head], responses.calls[0].request.headers[head])
-
-    @responses.activate
-    def test_failure(self):
-        """It should raise an HTTPError exception if an error status code is returned."""
-        # Setup the mocked response
-        input_data = {"input": "data"}
-        output_data = {"output": "data"}
-        responses.add(responses.PUT, self.test_url, json=output_data, status=404)
-
-        # Call the function, expecting an exception
-        self.assertRaises(HTTPError, self.client.put, self.test_url, data=input_data)
-
-        # Still make sure it actually did a query and received a result
-        self.assertEqual(len(responses.calls), 1)
-        self.assertEqual(responses.calls[0].request.url, self.test_url)
-
-
-class TestDelete(TestClient):
-    """Test the delete method."""
+class TestDelete(BaseTestMethod, TestClient):
+    """Test the get method."""
 
     def setUp(self):  # pylint: disable=invalid-name
         """Initialize the class."""
@@ -478,46 +459,10 @@ class TestDelete(TestClient):
         # An example URL to use in testing
         self.test_url = self.cfixt.base_url + "/test/url"
 
-    @responses.activate
-    def test_success(self):
-        """It should complete correctly if a 200-level status code is returned."""
-        # Setup the mocked response
-        responses.add(responses.DELETE, self.test_url, status=204)
-
-        # Call the function
-        self.client.delete(self.test_url)
-
-        # Verify all the query information
-        self.assertEqual(len(responses.calls), 1)
-        self.assertEqual(responses.calls[0].request.url, self.test_url)
-
-    @responses.activate
-    def test_headers(self):
-        """It should add passed headers."""
-        # Setup the mocked response
-        responses.add(responses.DELETE, self.test_url, status=204)
-
-        # Call the function
-        headers = {"newheader": "123"}
-        self.client.delete(self.test_url, headers=headers)
-
-        # Verify all the query information
-        self.assertEqual(len(responses.calls), 1)
-        self.assertEqual(responses.calls[0].request.url, self.test_url)
-
-        for head in headers:
-            self.assertTrue(head in responses.calls[0].request.headers)
-            self.assertEqual(headers[head], responses.calls[0].request.headers[head])
-
-    @responses.activate
-    def test_failure(self):
-        """It should raise an HTTPError exception if a non-200 status code is returned."""
-        # Setup the mocked response
-        responses.add(responses.DELETE, self.test_url, status=404)
-
-        # Call the function, expecting an exception
-        self.assertRaises(HTTPError, self.client.delete, self.test_url)
-
-        # Still make sure it actually did a query and received a result
-        self.assertEqual(len(responses.calls), 1)
-        self.assertEqual(responses.calls[0].request.url, self.test_url)
+        self.method = aiohttp.hdrs.METH_DELETE
+        self.call_type = str(self.method).lower()
+        self.call = getattr(self.client, self.call_type)
+        self.input_data = {"input": "data"}
+        self.output_data = {"output": "data"}
+        self.failure_output_data = {'description': 'nice', 'code': 69}
+        self.headers = {"Content-Type": "application/json", "newheader": "123"}

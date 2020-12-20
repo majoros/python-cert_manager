@@ -29,3 +29,6 @@ class ResponseError(CertManagerException):
 
 class InvalidRequest(CertManagerException):
     pass
+
+class SectigoConnectionError(CertManagerException):
+    pass

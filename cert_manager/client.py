@@ -5,16 +5,23 @@ import logging
 import os
 import re
 import sys
+import json.decoder
+import asyncio
 import aiohttp
 import aiohttp.web
 
-import json.decoder
+from aiohttp.client_exceptions import (
+    ClientConnectionError,
+    ClientPayloadError,
+    ClientSSLError,
+)
 
 from . import __version__
 from ._helpers import traffic_log
 from .exceptions import (
     InvalidRequest,
     ResponseError,
+    SectigoConnectionError,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -61,7 +68,9 @@ class Client(object):
         self.__headers = {
             'customerUri': self.__login_uri,
             'login': self.__username,
-            'Content-Type': 'application/json',
+            #'Content-Type': 'application/json',
+            'User-Agent': self.user_agent,
+            'Accept': "application/json",
         }
 
         # Setup the Session for certificate auth
@@ -82,6 +91,17 @@ class Client(object):
             self.__password = kwargs["password"]
             self.__headers["password"] = self.__password
 
+        self.__session.headers.update(self.__headers)
+
+    #def __del__(self):
+    ##    if self.__session and hasattr(self.__session, 'close'):
+    ##        await self.__session.close()
+    #    try:
+    #        loop = asyncio.get_event_loop()
+    #        loop.run_until_complete(asyncio.sleep(0))
+    #        loop.close()
+    #    except RuntimeError:
+    #        pass
 
 
     @property
@@ -120,6 +140,7 @@ class Client(object):
             head = self.__headers.copy()
             head.update(headers)
             self.__headers = head
+            self.__session.headers.update(self.__headers)
 
     def remove_headers(self, headers=None):
         """Remove the requested header keys from the internally stored headers.
@@ -133,6 +154,7 @@ class Client(object):
             for head in headers:
                 if head in self.__headers:
                     del self.__headers[head]
+                    del self.__session.headers[head]
 
     async def _raise_for_status(self, result):
         """
@@ -165,12 +187,7 @@ class Client(object):
         :return obj: A requests.Response object received as a response
         """
         result = await self.request('GET', url=url, headers=headers, params=params)
-        try:
-            return result
-        except Exception as err:
-            print('deguq')
-            print(str(err))
-            return {}
+        return result
 
     #@traffic_log(traffic_logger=LOGGER)
     async def post(self, url, headers=None, data=None):
@@ -182,10 +199,7 @@ class Client(object):
         :return obj: A requests.Response object received as a response
         """
         result = await self.request('POST', url=url, headers=headers, data=data)
-        try:
-            return result
-        except Exception:
-            return {}
+        return result
 
     #@traffic_log(traffic_logger=LOGGER)
     async def put(self, url, headers=None, data=None):
@@ -197,10 +211,7 @@ class Client(object):
         :return obj: A requests.Response object received as a response
         """
         result = await self.request('PUT', url, data=data, headers=headers)
-        try:
-            return result
-        except Exception:
-            return {}
+        return result
 
     #@traffic_log(traffic_logger=LOGGER)
     async def delete(self, url, headers=None):
@@ -211,10 +222,7 @@ class Client(object):
         :return obj: A requests.Response object received as a response
         """
         result = await self.request('DELETE', url, headers=headers)
-        try:
-            return result
-        except Exception:
-            return {}
+        return result
 
     async def request(self, method, url, headers=None, params=None, post_params=None, data=None):
         """Submit a POST request to the provided URL and data.
@@ -245,6 +253,11 @@ class Client(object):
         }
 
         if method in ['POST', 'PUT', 'PATCH', 'OPTIONS', 'DELETE']:
+            print("!!!!!!!")
+            print("!!!!!!!")
+            print(headers)
+            print("!!!!!!!")
+            print("!!!!!!!")
             if re.search('json', headers['Content-Type'], re.IGNORECASE):
                 if data is not None:
                     args['data'] = data
@@ -264,8 +277,10 @@ class Client(object):
                     'declared content type.'
                 )
 
-        result = await self.__session.request(**args)
-        # TODO: Raise an exception if the return code is in an error range
+        try:
+            result = await self.__session.request(**args)
+        except (ClientConnectionError, ClientPayloadError, ClientSSLError) as err:
+            raise SectigoConnectionError(str(err), None, args['url'])
         await self._raise_for_status(result)
 
         return result

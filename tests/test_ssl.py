@@ -4,24 +4,26 @@
 # pylint: disable=protected-access
 # pylint: disable=invalid-name
 
-from testtools import TestCase
+import aiohttp
+import aiounittest
+from aioresponses import CallbackResult, aioresponses
 
 from cert_manager.ssl import SSL
 
-from .lib.testbase import ClientFixture
+from .lib.testbase import BaseTestClient
 
 
 # pylint: disable=too-few-public-methods
-class TestSSL(TestCase):
+class TestSSL(aiounittest.AsyncTestCase):  # pylint: disable=too-few-public-methods
     """Serve as a Base class for all tests of the Certificates class."""
 
     def setUp(self):  # pylint: disable=invalid-name
         """Initialize the class."""
         # Call the inherited setUp method
-        super(TestSSL, self).setUp()
+        super().setUp()
 
         # Make sure the Client fixture is created and setup
-        self.cfixt = self.useFixture(ClientFixture())
+        self.cfixt = BaseTestClient()
         self.client = self.cfixt.client
 
         # Set some default values
@@ -53,3 +55,35 @@ class TestInit(TestSSL):
         self.assertEqual(end._client, self.client)
         self.assertEqual(end._api_version, version)
         self.assertEqual(end._api_url, api_url)
+
+class TestList(TestSSL):
+    @aioresponses()
+    async def test_success(self, m):
+        """It should return data correctly if a 200-level status code is returned with data."""
+        # Setup the mocked response
+
+        payload={"test": "data"}
+        self.client.__session = aiohttp.ClientSession()
+        self.client._api_url = self.api_url
+        end = SSL(client=self.client, api_version=self.api_version)
+        m.get(
+            url=self.api_url,
+            payload=payload,
+        )
+
+        cur_reqs = len(m.requests)
+        # Call the function
+        resp = await end.list()
+        print("?????????????????????????")
+        print("?????????????????????????")
+        print(len(m.requests))
+        print(cur_reqs)
+        print(resp)
+        print("?????????????????????????")
+        print("?????????????????????????")
+
+        # Verify all the query information
+        self.assertEqual(resp, payload)
+        self.assertEqual(len(m.requests), cur_reqs + 1)
+        self.assertEqual(str(list(m.requests)[cur_reqs][0]), 'GET')
+        self.assertEqual(str(list(m.requests)[cur_reqs][1]), self.api_url)
