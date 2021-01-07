@@ -28,3 +28,18 @@ class Domain(Endpoint):
         result = await self._client.get(self._api_url, params=kwargs)
         result = await result.json()
         return result
+
+    async def details(self, dom_id):
+        """Retrieve the details of a certificate.
+
+        :param int cert_id: The certificate ID
+        :return dict: A dictionary containing the certificate details.
+        """
+        url = self._url("/{}".format(dom_id))
+        result = await self._client.get(url)
+        result = await result.json()
+        if 'expires' not in result:
+            result['expires'] = ''
+        else:
+            result['expires'] = dt.strptime(result['dcvExperation'], '%m/%d/%Y')
+        return result
