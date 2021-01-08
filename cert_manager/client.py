@@ -68,7 +68,7 @@ class Client(object):
         self.__headers = {
             'customerUri': self.__login_uri,
             'login': self.__username,
-            #'Content-Type': 'application/json',
+            'Content-Type': 'application/json',
             'User-Agent': self.user_agent,
             'Accept': "application/json",
         }
@@ -253,12 +253,7 @@ class Client(object):
         }
 
         if method in ['POST', 'PUT', 'PATCH', 'OPTIONS', 'DELETE']:
-            print("!!!!!!!")
-            print("!!!!!!!")
-            print(headers)
-            print("!!!!!!!")
-            print("!!!!!!!")
-            if re.search('json', headers['Content-Type'], re.IGNORECASE):
+            if 'Content-Type' not in headers or re.search('json', headers['Content-Type'], re.IGNORECASE):
                 if data is not None:
                     args['data'] = data
             elif headers['Content-Type'] == 'application/x-www-form-urlencoded':  # noqa: E501
