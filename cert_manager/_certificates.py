@@ -98,7 +98,7 @@ class Certificates(Endpoint):
             result['expires'] = dt.strptime(result['expires'], '%m/%d/%Y')
         return result
 
-    async def collect(self, cert_id, cert_format):
+    async def collect(self, cert_id, cert_format, binary=False):
         """Retrieve an existing certificate from the API.
 
         :param int cert_id: The certificate ID
@@ -111,7 +111,10 @@ class Certificates(Endpoint):
         url = self._url("/collect/{}/{}".format(cert_id, cert_format))
 
         result = await self._client.get(url)
-        result = await result.text()
+        if binary:
+            result = await result.text()
+        else:
+            result = await result.read()
 
         # The certificate is ready for collection
         return result
