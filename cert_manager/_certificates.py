@@ -112,9 +112,9 @@ class Certificates(Endpoint):
 
         result = await self._client.get(url)
         if binary:
-            result = await result.text()
-        else:
             result = await result.read()
+        else:
+            result = await result.text()
 
         # The certificate is ready for collection
         return result
